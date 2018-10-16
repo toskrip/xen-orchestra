@@ -368,7 +368,7 @@ async function delete_({
 
   // Update resource sets
   if (
-    vm.type === 'VM' && // only regular VMs
+    (vm.type === 'VM' || vm.type === 'VM-snapshot') && // only regular VMs and snapshots
     xapi.xo.getData(vm._xapiId, 'resourceSet') != null
   ) {
     this.setVmResourceSet(vm._xapiId, null)::ignoreErrors()
@@ -747,7 +747,6 @@ export { convertToTemplate as convert }
 
 // -------------------------------------------------------------------
 
-// TODO: implement resource sets
 export const snapshot = defer(async function(
   $defer,
   {
@@ -757,7 +756,15 @@ export const snapshot = defer(async function(
     description,
   }
 ) {
-  await checkPermissionOnSrs.call(this, vm)
+  if (vm.resourceSet !== undefined) {
+    await this.allocateLimitsInResourceSet(
+      await this.computeVmResourcesUsage(vm),
+      vm.resourceSet,
+      this.user.permission === 'admin'
+    )
+  } else {
+    await checkPermissionOnSrs.call(this, vm)
+  }
 
   const xapi = this.getXapi(vm)
   const { $id: snapshotId } = await (saveMemory
