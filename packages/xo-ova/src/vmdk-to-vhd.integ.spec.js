@@ -52,13 +52,10 @@ test('VMDK to VHD can convert a random data file with VMDKDirectParser', async (
   const dataSize = 100 * 1024 * 1024 // this number is an integer head/cylinder/count equation solution
   try {
     await execa.shell(
-      'base64 /dev/urandom | head -c ' + dataSize + ' > ' + inputRawFileName
+      `base64 /dev/urandom | head -c ${dataSize} > ${inputRawFileName}`
     )
     await execa.shell(
-      'python /usr/share/pyshared/VMDKstream.py ' +
-        inputRawFileName +
-        ' ' +
-        vmdkFileName
+      `python /usr/share/pyshared/VMDKstream.py ${inputRawFileName} ${vmdkFileName}`
     )
     const result = await readVmdkGrainTable(createFileAccessor(vmdkFileName))
     const pipe = (await vmdkToVhd(createReadStream(vmdkFileName), result)).pipe(
