@@ -2088,6 +2088,7 @@ const messages = {
   srAllDisconnected: 'Disconnected',
   srSomeConnected: 'Partially connected',
   srAllConnected: 'Connected',
+  migrateSelectedVdis: 'Migrate selected VDIs',
 
   // ----- XOSAN -----
   xosanTitle: 'XOSAN',
