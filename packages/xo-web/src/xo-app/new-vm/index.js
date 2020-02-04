@@ -1659,7 +1659,7 @@ export default class NewVm extends BaseComponent {
       showAdvanced,
       tags,
     } = this.state.state
-    const { isAdmin } = this.props
+    const { isAdmin, pool } = this.props
     const { formatMessage } = this.props.intl
     const isHvm = this._isHvm()
 
@@ -1867,6 +1867,7 @@ export default class NewVm extends BaseComponent {
             <SectionContent>
               <Item label={_('vmBootFirmware')}>
                 <SelectBootFirmware
+                  host={pool.master}
                   onChange={this._handleBootFirmware}
                   value={hvmBootFirmware}
                 />
