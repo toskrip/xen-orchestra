@@ -7,7 +7,10 @@ import { getOldEntries } from '@xen-orchestra/backups/getOldEntries'
 import { PassThrough } from 'stream'
 import { watchStreamSize } from '@xen-orchestra/backups/watchStreamSize'
 
+import { ContinuousReplicationWriter } from './_ContinuousReplicationWriter'
+import { DeltaBackupWriter } from './_DeltaBackupWriter'
 import { DisasterRecoveryWriter } from './_DisasterRecoveryWriter'
+import { exportDeltaVm } from './_deltaVm'
 import { FullBackupWriter } from './_FullBackupWriter'
 
 const { debug, warn } = createLogger('xo:proxy:backups:VmBackup')
@@ -105,6 +108,75 @@ export class VmBackup {
       this.sourceVm = vm
       this.timestamp = Date.now()
     }
+  }
+
+  async _copyDelta() {
+    const { _settings: settings, job, vm } = this
+    const allSettings = job.settings
+
+    const writers = []
+    Object.keys(this.remoteHandlers).forEach(remoteId => {
+      const targetSettings = {
+        ...settings,
+        ...allSettings[remoteId],
+      }
+      if (targetSettings.exportRetention !== 0) {
+        writers.push(new DeltaBackupWriter(this, remoteId, targetSettings))
+      }
+    })
+    this.srs.forEach(sr => {
+      const targetSettings = {
+        ...settings,
+        ...allSettings[sr.uuid],
+      }
+      if (targetSettings.copyRetention !== 0) {
+        writers.push(new ContinuousReplicationWriter(this, sr, targetSettings))
+      }
+    })
+
+    if (writers.length === 0) {
+      return
+    }
+
+    const { compression } = job
+    const stream = await exportDeltaVm(
+      vm.$xapi.VM_export(this.sourceVm.$ref, {
+        compress:
+          Boolean(compression) && (compression === 'native' ? 'gzip' : 'zstd'),
+        useSnapshot: false,
+      })
+    )
+    const sizeContainer = watchStreamSize(stream)
+
+    const timestamp = Date.now()
+
+    await Promise.all(
+      writers.map(async writer => {
+        try {
+          await writer.run({
+            stream: forkStreamUnpipe(stream),
+            timestamp,
+          })
+        } catch (error) {
+          warn('copy failure', {
+            error,
+            target: writer.target,
+            vm,
+          })
+        }
+      })
+    )
+
+    const { size } = sizeContainer
+    const end = Date.now()
+    const duration = end - timestamp
+    debug('transfer complete', {
+      duration,
+      speed: duration !== 0 ? (size * 1e3) / 1024 / 1024 / duration : 0,
+      size,
+    })
+
+    return sizeContainer.size
   }
 
   async _copyFull() {
@@ -232,7 +304,11 @@ export class VmBackup {
         ignoreErrors.call(vm.$callAsync('start', false, false))
       }
 
-      return { transferredSize: await this._copyFull() }
+      return {
+        transferredSize: await (this.job.mode === 'full'
+          ? this._copyFull()
+          : this._copyDelta()),
+      }
     } finally {
       if (startAfter) {
         ignoreErrors.call(vm.$callAsync('start', false, false))
