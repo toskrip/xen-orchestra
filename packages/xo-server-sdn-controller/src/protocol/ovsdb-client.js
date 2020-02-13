@@ -273,7 +273,7 @@ export class OvsdbClient {
     socket.destroy()
   }
 
-  async setController(network) {
+  async setBridgeController(network) {
     const socket = await this._connect()
     const bridge = await this._getBridgeForNetwork(network, socket)
     if (bridge.uuid === undefined) {
@@ -281,7 +281,7 @@ export class OvsdbClient {
       return
     }
 
-    const target = 'ssl:' // TODO: get controller from OpenFlowController
+    const target = 'pssl:'
     // Add controller to openvswitch table if needed
     let where = [['target', '==', ['string', target]]]
     let controllerUuid = await this._select(
