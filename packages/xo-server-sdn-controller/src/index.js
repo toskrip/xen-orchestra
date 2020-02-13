@@ -10,6 +10,7 @@ import { join } from 'path'
 
 import { OvsdbClient } from './protocol/ovsdb-client'
 import { PrivateNetwork } from './private-network/private-network'
+import { tlsHelper } from './utils/tls-helper'
 
 // =============================================================================
 
@@ -326,6 +327,8 @@ class SDNController extends EventEmitter {
     this._prevVni = 0
 
     this.ovsdbClients = {}
+
+    this._tlsHelper = tlsHelper()
   }
 
   // ---------------------------------------------------------------------------
@@ -360,10 +363,11 @@ class SDNController extends EventEmitter {
       fileRead(join(certDirectory, CLIENT_CERT)),
       fileRead(join(certDirectory, CA_CERT)),
     ])
-
-    forOwn(this.ovsdbClients, client => {
-      client.updateCertificates(this._clientKey, this._clientCert, this._caCert)
-    })
+    this._tlsHelper.updateCertificates(
+      this._clientKey,
+      this._clientCert,
+      this._caCert
+    )
     const updatedPools = []
     await Promise.all(
       map(this._privateNetworks, async privateNetworks => {
@@ -1078,12 +1082,7 @@ class SDNController extends EventEmitter {
       return
     }
 
-    const client = new OvsdbClient(
-      host,
-      this._clientKey,
-      this._clientCert,
-      this._caCert
-    )
+    const client = new OvsdbClient(host, this._tlsHelper)
     this.ovsdbClients[host.$ref] = client
   }
 }

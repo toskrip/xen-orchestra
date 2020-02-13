@@ -1,8 +1,9 @@
 import assert from 'assert'
 import createLogger from '@xen-orchestra/log'
 import fromEvent from 'promise-toolbox/fromEvent'
-import { connect } from 'tls'
 import { forOwn, toPairs } from 'lodash'
+
+// =============================================================================
 
 const log = createLogger('xo:xo-server:sdn-controller:ovsdb-client')
 
@@ -36,7 +37,7 @@ export class OvsdbClient {
     - `remote_ip`: Remote IP of the tunnel
   */
 
-  constructor(host, clientKey, clientCert, caCert) {
+  constructor(host, tlsHelper) {
     this._numberOfPortAndInterface = 0
     this._requestId = 0
 
@@ -44,21 +45,9 @@ export class OvsdbClient {
 
     this.host = host
 
-    this.updateCertificates(clientKey, clientCert, caCert)
+    this._tlsHelper = tlsHelper
 
     log.debug('New OVSDB client', {
-      host: this.host.name_label,
-    })
-  }
-
-  // ---------------------------------------------------------------------------
-
-  updateCertificates(clientKey, clientCert, caCert) {
-    this._clientKey = clientKey
-    this._clientCert = clientCert
-    this._caCert = caCert
-
-    log.debug('Certificates have been updated', {
       host: this.host.name_label,
     })
   }
@@ -284,6 +273,102 @@ export class OvsdbClient {
     socket.destroy()
   }
 
+  async setController(network) {
+    const socket = await this._connect()
+    const bridge = await this._getBridgeForNetwork(network, socket)
+    if (bridge.uuid === undefined) {
+      socket.destroy()
+      return
+    }
+
+    const target = 'ssl:' // TODO: get controller from OpenFlowController
+    // Add controller to openvswitch table if needed
+    let where = [['target', '==', ['string', target]]]
+    let controllerUuid = await this._select(
+      'Controller',
+      ['_uuid'],
+      where,
+      socket
+    )
+    if (controllerUuid === undefined) {
+      const addControllerOperation = {
+        op: 'insert',
+        table: 'Controller',
+        row: {
+          target,
+        },
+      }
+
+      const params = ['Open_vSwitch', addControllerOperation]
+      const jsonObjects = await this._sendOvsdbTransaction(params, socket)
+      if (jsonObjects === undefined) {
+        socket.destroy()
+        return
+      }
+      if (jsonObjects[0].error != null) {
+        log.error('Error while adding controller', {
+          error: jsonObjects[0].error,
+          host: this.host.name_label,
+        })
+        socket.destroy()
+        return
+      }
+
+      controllerUuid = await this._select(
+        'Controller',
+        ['_uuid'],
+        where,
+        socket
+      )
+      assert(controllerUuid !== undefined)
+
+      log.debug('Controller added', {
+        host: this.host.name_label,
+      })
+    }
+
+    // Set controller to the bridge if needed
+    where = [
+      ['_uuid', '==', ['uuid', bridge.uuid]],
+      ['controller', 'includes', ['uuid', controllerUuid]],
+    ]
+    if (this._select('Bridge', ['_uuid'], where, socket) !== undefined) {
+      // Nothing to do, controller already set
+      socket.destroy()
+      return
+    }
+
+    const mutateBridgeOperation = {
+      op: 'mutate',
+      table: 'Bridge',
+      where: [['_uuid', '==', ['uuid', bridge.uuid]]],
+      mutations: [['controller', 'insert', ['uuid', controllerUuid]]],
+    }
+
+    const params = ['Open_vSwitch', mutateBridgeOperation]
+    const jsonObjects = await this._sendOvsdbTransaction(params, socket)
+    if (jsonObjects === undefined) {
+      socket.destroy()
+      return
+    }
+    if (jsonObjects[0].error != null) {
+      log.error('Error while setting controller for bridge', {
+        error: jsonObjects[0].error,
+        bridge: bridge.name,
+        host: this.host.name_label,
+      })
+      socket.destroy()
+      return
+    }
+
+    log.debug('Controller set for bridge', {
+      bridge: bridge.name,
+      host: this.host.name_label,
+    })
+
+    socket.destroy()
+  }
+
   // ===========================================================================
 
   _parseJson(chunk) {
@@ -421,9 +506,9 @@ export class OvsdbClient {
   async _select(table, columns, where, socket) {
     const selectOperation = {
       op: 'select',
-      table: table,
-      columns: columns,
-      where: where,
+      table,
+      columns,
+      where,
     }
 
     const params = ['Open_vSwitch', selectOperation]
@@ -505,37 +590,7 @@ export class OvsdbClient {
 
   // ---------------------------------------------------------------------------
 
-  async _connect() {
-    const options = {
-      ca: this._caCert,
-      key: this._clientKey,
-      cert: this._clientCert,
-      host: this.host.address,
-      port: OVSDB_PORT,
-      rejectUnauthorized: false,
-      requestCert: false,
-    }
-    const socket = connect(options)
-
-    try {
-      await fromEvent(socket, 'secureConnect')
-    } catch (error) {
-      log.error('TLS connection failed', {
-        error,
-        code: error.code,
-        host: this.host.name_label,
-      })
-      throw error
-    }
-
-    socket.on('error', error => {
-      log.error('Socket error', {
-        error,
-        code: error.code,
-        host: this.host.name_label,
-      })
-    })
-
-    return socket
+  _connect() {
+    return this._tlsHelper.connect(this.host.address, OVSDB_PORT)
   }
 }
