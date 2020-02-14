@@ -8,7 +8,7 @@ const log = createLogger('xo:xo-server:sdn-controller:tls-connect')
 
 // =============================================================================
 
-export class tlsHelper {
+export class TlsHelper {
   updateCertificates(clientKey, clientCert, caCert) {
     this._clientKey = clientKey
     this._clientCert = clientCert

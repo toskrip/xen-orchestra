@@ -11,7 +11,7 @@ import { join } from 'path'
 import { OpenFlowChannel } from './protocol/openflow-channel'
 import { OvsdbClient } from './protocol/ovsdb-client'
 import { PrivateNetwork } from './private-network/private-network'
-import { tlsHelper } from './utils/tls-helper'
+import { TlsHelper } from './utils/tls-helper'
 
 // =============================================================================
 
@@ -330,7 +330,7 @@ class SDNController extends EventEmitter {
     this.ovsdbClients = {}
     this.ofChannels = {}
 
-    this._tlsHelper = tlsHelper()
+    this._tlsHelper = new TlsHelper()
   }
 
   // ---------------------------------------------------------------------------
@@ -627,8 +627,6 @@ class SDNController extends EventEmitter {
     for (const poolId of poolIds) {
       const pool = this._xo.getXapiObject(this._xo.getObject(poolId, 'pool'))
 
-      await this._setPoolControllerIfNeeded(pool)
-
       const pifId = pifIds.find(id => {
         const pif = this._xo.getXapiObject(this._xo.getObject(id, 'PIF'))
         return pif.$pool.$ref === pool.$ref
@@ -672,6 +670,7 @@ class SDNController extends EventEmitter {
           this._createOfChannel(host)
         })
       )
+      await this._setPoolControllerIfNeeded(pool)
 
       await privateNetwork.addNetwork(createdNetwork)
       this._networks.set(createdNetwork.$id, createdNetwork.$ref)

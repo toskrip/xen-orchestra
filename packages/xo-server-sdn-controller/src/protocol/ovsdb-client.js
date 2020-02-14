@@ -283,7 +283,7 @@ export class OvsdbClient {
 
     const target = 'pssl:'
     // Add controller to openvswitch table if needed
-    let where = [['target', '==', ['string', target]]]
+    let where = [['target', '==', target]]
     let controllerUuid = await this._select(
       'Controller',
       ['_uuid'],
