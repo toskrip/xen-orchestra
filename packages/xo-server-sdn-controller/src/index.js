@@ -8,6 +8,7 @@ import { filter, find, forOwn, map, omitBy } from 'lodash'
 import { fromCallback, promisify } from 'promise-toolbox'
 import { join } from 'path'
 
+import { OpenFlowChannel } from './protocol/openflow-channel'
 import { OvsdbClient } from './protocol/ovsdb-client'
 import { PrivateNetwork } from './private-network/private-network'
 import { tlsHelper } from './utils/tls-helper'
@@ -327,6 +328,7 @@ class SDNController extends EventEmitter {
     this._prevVni = 0
 
     this.ovsdbClients = {}
+    this.ofChannels = {}
 
     this._tlsHelper = tlsHelper()
   }
@@ -450,6 +452,7 @@ class SDNController extends EventEmitter {
     this._cleaners = []
 
     this.ovsdbClients = {}
+    this.ofChannels = {}
 
     this._unsetApiMethods()
   }
@@ -469,6 +472,7 @@ class SDNController extends EventEmitter {
       const hosts = filter(xapi.objects.all, { $type: 'host' })
       for (const host of hosts) {
         this._createOvsdbClient(host)
+        this._createOfChannel(host)
       }
 
       // Add already existing private networks
@@ -665,6 +669,7 @@ class SDNController extends EventEmitter {
         map(hosts, async host => {
           await createTunnel(host, createdNetwork)
           this._createOvsdbClient(host)
+          this._createOfChannel(host)
         })
       )
 
@@ -712,6 +717,7 @@ class SDNController extends EventEmitter {
           this._newHosts.push(object)
         }
         this._createOvsdbClient(object)
+        this._createOfChannel(object)
       }
     })
   }
@@ -742,6 +748,10 @@ class SDNController extends EventEmitter {
         this.ovsdbClients = omitBy(
           this.ovsdbClients,
           client => client.host.$id === id
+        )
+        this.ofChannels = omitBy(
+          this.ofChannels,
+          channel => channel.host.$id === id
         )
 
         // If a Star center host is removed: re-elect a new center where needed
@@ -859,6 +869,8 @@ class SDNController extends EventEmitter {
       })
     }
 
+    this._setBridgeControllerForHost(host)
+
     const privateNetworks = filter(
       this._privateNetworks,
       privateNetwork => privateNetwork[host.$pool.uuid] !== undefined
@@ -909,7 +921,22 @@ class SDNController extends EventEmitter {
     log.debug('SDN controller has been set', {
       pool: pool.name_label,
     })
+
+    const hosts = filter(pool.$xapi.objects.all, { $type: 'host' })
+    await Promise.all(
+      hosts.map(host => {
+        return this._setBridgeControllerForHost(host)
+      })
+    )
     this._cleaners.push(await this._manageXapi(pool.$xapi))
+  }
+
+  _setBridgeControllerForHost(host) {
+    const client = this.ovsdbClients[host.$ref]
+    const networks = host.$PIFs.map(pif => pif.$network)
+    return Promise.all(
+      networks.map(network => client.setBridgeController(network))
+    )
   }
 
   // ---------------------------------------------------------------------------
@@ -1084,6 +1111,16 @@ class SDNController extends EventEmitter {
 
     const client = new OvsdbClient(host, this._tlsHelper)
     this.ovsdbClients[host.$ref] = client
+  }
+
+  _createOfChannel(host) {
+    const foundChannel = this.ofChannels[host.$ref]
+    if (foundChannel !== undefined) {
+      return
+    }
+
+    const channel = new OpenFlowChannel(host, this._tlsHelper)
+    this.ofChannels[host.$ref] = channel
   }
 }
 
