@@ -292,7 +292,6 @@ export class OvsdbClient {
     for (const network of networks) {
       const bridge = await this._getBridgeForNetwork(network, socket)
       if (bridge.uuid === undefined) {
-        socket.destroy()
         continue
       }
 
@@ -309,13 +308,68 @@ export class OvsdbClient {
       socket.destroy()
       return
     }
-    if (jsonObjects[0].error !== undefined) {
+    if (jsonObjects[0].error !== null) {
       log.error('Error while setting controller', {
         error: jsonObjects[0].error,
         host: this.host.name_label,
       })
     } else {
-      log.info('Controller set', { host: this.host.name_label })
+      this._controller = jsonObjects[0].result[0].uuid[1]
+      log.info('Controller set', {
+        controller: this._controllerUuid,
+        host: this.host.name_label,
+      })
+    }
+
+    socket.destroy()
+  }
+
+  async setBridgeControllerForNetwork(network) {
+    const socket = await this._connect()
+    if (this._controllerUuid === undefined) {
+      const where = [['target', '==', TARGET]]
+      const selectResult = await this._select(
+        'Controller',
+        ['_uuid'],
+        where,
+        socket
+      )
+
+      this._controllerUuid = selectResult._uuid[1]
+    }
+    assert(this._controllerUuid !== undefined)
+
+    const bridge = await this._getBridgeForNetwork(network, socket)
+    if (bridge.uuid === undefined) {
+      socket.destroy()
+      return
+    }
+
+    const mutateOperation = {
+      op: 'mutate',
+      table: 'Bridge',
+      where: [['_uuid', '==', ['uuid', bridge.uuid]]],
+      mutations: [['controller', 'insert', ['uuid', this._controllerUuid]]],
+    }
+
+    const params = ['Open_vSwitch', mutateOperation]
+    const jsonObjects = await this._sendOvsdbTransaction(params, socket)
+    if (jsonObjects === undefined) {
+      socket.destroy()
+      return
+    }
+    if (jsonObjects[0].error !== null) {
+      log.error('Error while setting controller for network', {
+        error: jsonObjects[0].error,
+        host: this.host.name_label,
+        network: network.name_label,
+      })
+    } else {
+      log.info('Controller set for network', {
+        controller: this._controllerUuid,
+        host: this.host.name_label,
+        network: network.name_label,
+      })
     }
 
     socket.destroy()

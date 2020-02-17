@@ -703,7 +703,7 @@ class SDNController extends EventEmitter {
   }
 
   _objectsAdded(objects) {
-    forOwn(objects, object => {
+    forOwn(objects, async object => {
       const { $type } = object
 
       if ($type === 'host') {
@@ -717,6 +717,16 @@ class SDNController extends EventEmitter {
         }
         this._createOvsdbClient(object)
         this._createOfChannel(object)
+      } else if ($type === 'PIF') {
+        log.debug('New PIF', {
+          device: object.device,
+          host: object.$host.name_label,
+          network: object.$network.name_label,
+          pool: object.$pool.name_label,
+        })
+
+        const client = this.ovsdbClients[object.host]
+        client.setBridgeControllerForNetwork(object.$network)
       }
     })
   }
