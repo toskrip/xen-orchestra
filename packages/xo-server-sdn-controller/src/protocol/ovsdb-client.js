@@ -8,6 +8,7 @@ import { forOwn, toPairs } from 'lodash'
 const log = createLogger('xo:xo-server:sdn-controller:ovsdb-client')
 
 const OVSDB_PORT = 6640
+const TARGET = 'pssl:'
 
 // =============================================================================
 
@@ -273,98 +274,49 @@ export class OvsdbClient {
     socket.destroy()
   }
 
-  async setBridgeController(network) {
+  async setBridgeController() {
     const socket = await this._connect()
-    const bridge = await this._getBridgeForNetwork(network, socket)
-    if (bridge.uuid === undefined) {
-      socket.destroy()
-      return
-    }
-
-    const target = 'pssl:'
     // Add controller to openvswitch table if needed
-    let where = [['target', '==', target]]
-    let controllerUuid = await this._select(
-      'Controller',
-      ['_uuid'],
-      where,
-      socket
-    )
-    if (controllerUuid === undefined) {
-      const addControllerOperation = {
-        op: 'insert',
-        table: 'Controller',
-        row: {
-          target,
-        },
-      }
+    const params = ['Open_vSwitch']
 
-      const params = ['Open_vSwitch', addControllerOperation]
-      const jsonObjects = await this._sendOvsdbTransaction(params, socket)
-      if (jsonObjects === undefined) {
+    params.push({
+      op: 'insert',
+      table: 'Controller',
+      row: {
+        target: TARGET,
+      },
+      'uuid-name': 'new_controller',
+    })
+
+    const networks = this.host.$PIFs.map(pif => pif.$network)
+    for (const network of networks) {
+      const bridge = await this._getBridgeForNetwork(network, socket)
+      if (bridge.uuid === undefined) {
         socket.destroy()
-        return
-      }
-      if (jsonObjects[0].error != null) {
-        log.error('Error while adding controller', {
-          error: jsonObjects[0].error,
-          host: this.host.name_label,
-        })
-        socket.destroy()
-        return
+        continue
       }
 
-      controllerUuid = await this._select(
-        'Controller',
-        ['_uuid'],
-        where,
-        socket
-      )
-      assert(controllerUuid !== undefined)
-
-      log.debug('Controller added', {
-        host: this.host.name_label,
+      params.push({
+        op: 'mutate',
+        table: 'Bridge',
+        where: [['_uuid', '==', ['uuid', bridge.uuid]]],
+        mutations: [['controller', 'insert', ['named-uuid', 'new_controller']]],
       })
     }
 
-    // Set controller to the bridge if needed
-    where = [
-      ['_uuid', '==', ['uuid', bridge.uuid]],
-      ['controller', 'includes', ['uuid', controllerUuid]],
-    ]
-    if (this._select('Bridge', ['_uuid'], where, socket) !== undefined) {
-      // Nothing to do, controller already set
-      socket.destroy()
-      return
-    }
-
-    const mutateBridgeOperation = {
-      op: 'mutate',
-      table: 'Bridge',
-      where: [['_uuid', '==', ['uuid', bridge.uuid]]],
-      mutations: [['controller', 'insert', ['uuid', controllerUuid]]],
-    }
-
-    const params = ['Open_vSwitch', mutateBridgeOperation]
     const jsonObjects = await this._sendOvsdbTransaction(params, socket)
     if (jsonObjects === undefined) {
       socket.destroy()
       return
     }
-    if (jsonObjects[0].error != null) {
-      log.error('Error while setting controller for bridge', {
+    if (jsonObjects[0].error !== undefined) {
+      log.error('Error while setting controller', {
         error: jsonObjects[0].error,
-        bridge: bridge.name,
         host: this.host.name_label,
       })
-      socket.destroy()
-      return
+    } else {
+      log.info('Controller set', { host: this.host.name_label })
     }
-
-    log.debug('Controller set for bridge', {
-      bridge: bridge.name,
-      host: this.host.name_label,
-    })
 
     socket.destroy()
   }

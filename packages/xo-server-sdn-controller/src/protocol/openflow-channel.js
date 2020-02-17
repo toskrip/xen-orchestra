@@ -20,11 +20,11 @@ export class OpenFlowChannel {
   */
 
   constructor(host, tlsHelper) {
-    this._host = host
+    this.host = host
     this._tlsHelper = tlsHelper
 
     log.debug('New OpenFlow channel', {
-      host: this._host.name_label,
+      host: this.host.name_label,
     })
   }
 
@@ -62,6 +62,6 @@ export class OpenFlowChannel {
   // ---------------------------------------------------------------------------
 
   _connect() {
-    return this._tlsHelper.connect(this._host.address, OPENFLOW_PORT)
+    return this._tlsHelper.connect(this.host.address, OPENFLOW_PORT)
   }
 }

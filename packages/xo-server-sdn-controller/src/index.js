@@ -932,10 +932,7 @@ class SDNController extends EventEmitter {
 
   _setBridgeControllerForHost(host) {
     const client = this.ovsdbClients[host.$ref]
-    const networks = host.$PIFs.map(pif => pif.$network)
-    return Promise.all(
-      networks.map(network => client.setBridgeController(network))
-    )
+    return client.setBridgeController()
   }
 
   // ---------------------------------------------------------------------------
