@@ -8,6 +8,7 @@ import { forOwn, toPairs } from 'lodash'
 const log = createLogger('xo:xo-server:sdn-controller:ovsdb-client')
 
 const OVSDB_PORT = 6640
+const PROTOCOLS = 'OpenFlow10'
 const TARGET = 'pssl:'
 
 // =============================================================================
@@ -299,7 +300,10 @@ export class OvsdbClient {
         op: 'mutate',
         table: 'Bridge',
         where: [['_uuid', '==', ['uuid', bridge.uuid]]],
-        mutations: [['controller', 'insert', ['named-uuid', 'new_controller']]],
+        mutations: [
+          ['controller', 'insert', ['named-uuid', 'new_controller']],
+          ['protocols', 'insert', PROTOCOLS],
+        ],
       })
     }
 
@@ -349,7 +353,10 @@ export class OvsdbClient {
       op: 'mutate',
       table: 'Bridge',
       where: [['_uuid', '==', ['uuid', bridge.uuid]]],
-      mutations: [['controller', 'insert', ['uuid', this._controllerUuid]]],
+      mutations: [
+        ['controller', 'insert', ['uuid', this._controllerUuid]],
+        ['protocols', 'insert', PROTOCOLS],
+      ],
     }
 
     const params = ['Open_vSwitch', mutateOperation]

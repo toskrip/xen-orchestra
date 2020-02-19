@@ -1127,6 +1127,7 @@ class SDNController extends EventEmitter {
 
     const channel = new OpenFlowChannel(host, this._tlsHelper)
     this.ofChannels[host.$ref] = channel
+    channel._connect()
   }
 }
 
