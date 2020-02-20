@@ -124,7 +124,7 @@ export class OpenFlowChannel {
     }
   }
 
-  async _addFlow() {
+  _addFlow() {
     // TODO
   }
 
