@@ -57,6 +57,12 @@ const ACTIONS = [
 
 const INDIVIDUAL_ACTIONS = [
   {
+    handler: deployProxy,
+    icon: 'proxy',
+    label: _('reDeployProxy'),
+    level: 'warning',
+  },
+  {
     handler: checkProxyHealth,
     icon: 'diagnosis',
     label: _('checkProxyHealth'),

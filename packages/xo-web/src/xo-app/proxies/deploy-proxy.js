@@ -177,7 +177,7 @@ const Modal = decorate([
   ),
 ])
 
-const deployProxy = () =>
+const deployProxy = proxy =>
   form({
     defaultValue: {
       dns: '',
@@ -204,6 +204,7 @@ const deployProxy = () =>
               netmask:
                 (netmask = netmask.trim()) === '' ? DEFAULT_NETMASK : netmask,
             },
+            proxy,
           }
         : undefined
     )

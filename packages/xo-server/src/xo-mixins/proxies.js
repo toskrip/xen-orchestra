@@ -133,7 +133,7 @@ export default class Proxy {
   }
 
   @defer
-  async deployProxy($defer, srId, { network } = {}) {
+  async deployProxy($defer, srId, { network, proxyId } = {}) {
     const app = this._app
     const xoProxyConf = this._xoProxyConf
 
@@ -217,14 +217,29 @@ export default class Proxy {
       xoaUpgradeTimeout
     )
 
-    const { id } = await this.registerProxy({
+    const props = {
       authenticationToken: proxyAuthenticationToken,
       name: this._generateDefaultProxyName(date),
       vmUuid: vm.uuid,
-    })
-    $defer.onFailure.call(this, 'unregisterProxy', id)
+    }
+    if (proxyId !== undefined) {
+      const proxy = await this._getProxy(proxyId)
+      if (proxy.vmUuid !== undefined) {
+        $defer.onSuccess.call(
+          app.getXapi(proxy.vmUuid),
+          'deleteVm',
+          proxy.vmUuid
+        )
+      }
 
-    await this.checkProxyHealth(id)
+      await this.updateProxy(proxyId, props)
+      $defer.onFailure(this, 'updateProxy', proxyId, proxy)
+    } else {
+      proxyId = (await this.registerProxy(props)).id
+      $defer.onFailure.call(this, 'unregisterProxy', proxyId)
+    }
+
+    await this.checkProxyHealth(proxyId)
   }
 
   checkProxyHealth(id) {
