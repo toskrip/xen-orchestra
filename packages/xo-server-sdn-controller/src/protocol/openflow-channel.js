@@ -23,6 +23,8 @@ const FEATURES_REPLY = 'OFPT_FEATURES_REPLY'
 const PORT_STATUS = 'OFPT_PORT_STATUS'
 const FLOW_MOD = 'OFPT_FLOW_MOD'
 const FLOW_REMOVED = 'OFPT_FLOW_REMOVED'
+const CONFIG_REQUEST = 'OFPT_GET_CONFIG_REQUEST'
+const CONFIG_REPLY = 'OFPT_GET_CONFIG_REPLY'
 
 // OpenFlow command
 // const ADD = 'OFPFC_ADD'
@@ -37,6 +39,8 @@ const toType = {
   [HELLO]: 'ofp_header',
   [FEATURES_REQUEST]: 'ofp_header',
   [ECHO_REPLY]: 'ofp_header',
+  [FLOW_MOD]: 'ofp_flow_mod',
+  [CONFIG_REQUEST]: 'ofp_switch_config',
 }
 
 // =============================================================================
@@ -57,11 +61,13 @@ export class OpenFlowChannel {
     log.debug('New OpenFlow channel', {
       host: this.host.name_label,
     })
+
+    log.info('********************', { ofpp })
   }
 
   // ---------------------------------------------------------------------------
 
-  _processMessage(message) {
+  _processMessage(message, socket) {
     if (message.message === undefined) {
       log.error('Failed to get header while processing message', {
         message: util.inspect(message),
@@ -69,26 +75,41 @@ export class OpenFlowChannel {
       return
     }
 
+    log.info('*** MESSAGE RECEIVED', { message: message.message })
     const ofType = message.message.header.type
     switch (ofType) {
       case HELLO:
-        this._sendPacket(this._syncMessage(ofType, message))
-        this._sendPacket(this._syncMessage(FEATURES_REQUEST, message))
+        this._sendPacket(this._syncMessage(ofType, message), socket)
+        this._sendPacket(this._syncMessage(FEATURES_REQUEST, message), socket)
         break
       case ERROR:
         {
-          const { code, data, type } = message.message
-          log.error('OpenFlow error', { code, type, data })
+          const { code, data, type } = message.message.body
+          log.error('OpenFlow error', { code, type, data: oflib.unpack(data) })
         }
         break
       case ECHO_REQUEST:
-        this._sendPacket(this._syncMessage(ECHO_REPLY, message))
+        this._sendPacket(this._syncMessage(ECHO_REPLY, message), socket)
         break
       case PACKET_IN:
         log.info('PACKET_IN')
         break
       case FEATURES_REPLY:
-        log.info('FEATURES_REPLY')
+        {
+          const {
+            datapath_id: dpid,
+            capabilities,
+            ports,
+          } = message.message.body
+          log.info('FEATURES_REPLY', { dpid, capabilities, ports })
+          this._sendPacket(this._syncMessage(CONFIG_REQUEST, message), socket)
+        }
+        break
+      case CONFIG_REPLY:
+        {
+          const { flags } = message.message.body
+          log.info('CONFIG_REPLY', { flags })
+        }
         break
       case PORT_STATUS:
         log.info('PORT_STATUS')
@@ -102,7 +123,7 @@ export class OpenFlowChannel {
     }
   }
 
-  _addFlow() {
+  async _addFlow() {
     // TODO
   }
 
@@ -199,17 +220,26 @@ export class OpenFlowChannel {
 
   // ---------------------------------------------------------------------------
 
-  async _sendPacket(packet) {
-    const socket = await this._connect()
+  async _sendPacket(packet, socket) {
     const buf = Buffer.alloc(ofpp.sizes[toType[packet.header.type]])
 
     const pack = oflib.pack(packet, buf, 0)
     if ('error' in pack) {
-      log.error('Error while sending packing', { error: util.inspect(pack) })
+      log.error('Error while packing packet to send', {
+        error: util.inspect(pack),
+      })
       return
     }
 
-    socket.write(buf)
+    log.info('*** SENDING', { packet })
+    try {
+      socket.write(buf)
+    } catch (error) {
+      log.error('Error while writing into socket', {
+        error,
+        host: this.host.name_label,
+      })
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -223,12 +253,11 @@ export class OpenFlowChannel {
       const msgs = this._stream.process(data)
       msgs.forEach(msg => {
         if (msg.message !== undefined) {
-          this._processMessage(msg)
+          this._processMessage(msg, socket)
         } else {
           log.error('Error: Message is unparseable', { msg })
         }
       })
-      socket.destroy()
     })
     return socket
   }

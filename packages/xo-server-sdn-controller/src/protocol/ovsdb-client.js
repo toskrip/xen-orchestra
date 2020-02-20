@@ -8,7 +8,7 @@ import { forOwn, toPairs } from 'lodash'
 const log = createLogger('xo:xo-server:sdn-controller:ovsdb-client')
 
 const OVSDB_PORT = 6640
-const PROTOCOLS = 'OpenFlow10'
+const PROTOCOLS = ['set', ['OpenFlow10', 'OpenFlow11']]
 const TARGET = 'pssl:'
 
 // =============================================================================
