@@ -8,10 +8,11 @@ import { Stream } from 'oflib-node'
 // =============================================================================
 
 const log = createLogger('xo:xo-server:sdn-controller:openflow-controller')
+
+const OPENFLOW_PORT = 6653
 const version = '1.1'
 
 // OpenFlow message type
-const OPENFLOW_PORT = 6653
 const HELLO = 'OFPT_HELLO'
 const ERROR = 'OFPT_ERROR'
 const ECHO_REQUEST = 'OFPT_ECHO_REQUEST'
