@@ -1,4 +1,3 @@
-import Collapse from 'collapse'
 import Component from 'base-component'
 import PropTypes from 'prop-types'
 import React from 'react'
@@ -7,25 +6,10 @@ import { Vdi } from 'render-xo-item'
 
 import _ from '../../intl'
 import SingleLineRow from '../../single-line-row'
-import { Container, Col } from 'grid'
+import { Col, Container } from '../../grid'
+import { Collapsible } from '../../collapse'
 import { isSrWritable } from 'xo'
 import { SelectSr } from '../../select-objects'
-
-const Collapsible = ({ collapsible, children, ...props }) =>
-  collapsible ? (
-    <Collapse {...props}>{children}</Collapse>
-  ) : (
-    <div>
-      <span>{props.buttonText}</span>
-      <br />
-      {children}
-    </div>
-  )
-
-Collapsible.propTypes = {
-  collapsible: PropTypes.bool.isRequired,
-  children: PropTypes.node.isRequired,
-}
 
 export default class ChooseSrForEachVdisModal extends Component {
   static propTypes = {

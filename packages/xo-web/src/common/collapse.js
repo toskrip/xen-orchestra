@@ -5,6 +5,21 @@ import Button from './button'
 import Component from './base-component'
 import Icon from './icon'
 
+export const Collapsible = ({ collapsible, children, ...props }) =>
+  collapsible ? (
+    <Collapse {...props}>{children}</Collapse>
+  ) : (
+    <div>
+      {props.buttonText !== undefined && <p>{props.buttonText}</p>}
+      {children}
+    </div>
+  )
+
+Collapsible.propTypes = {
+  collapsible: PropTypes.bool.isRequired,
+  children: PropTypes.node.isRequired,
+}
+
 export default class Collapse extends Component {
   static propTypes = {
     buttonText: PropTypes.any.isRequired,
