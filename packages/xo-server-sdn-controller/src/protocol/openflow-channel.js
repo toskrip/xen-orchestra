@@ -28,7 +28,7 @@ const CONFIG_REQUEST = 'OFPT_GET_CONFIG_REQUEST'
 const CONFIG_REPLY = 'OFPT_GET_CONFIG_REPLY'
 
 // OpenFlow command
-// const ADD = 'OFPFC_ADD'
+const ADD = 'OFPFC_ADD'
 // const MODIFY = 'OFPFC_MODIFY'
 // const MODIFY_STRICT = 'OFPFC_MODIFY_STRICT'
 // const DELETE = 'OFPFC_DELETE'
@@ -40,7 +40,7 @@ const toType = {
   [HELLO]: 'ofp_header',
   [FEATURES_REQUEST]: 'ofp_header',
   [ECHO_REPLY]: 'ofp_header',
-  [FLOW_MOD]: 'ofp_flow_mod',
+  [FLOW_MOD]: 'ofp_desc_stats',
   [CONFIG_REQUEST]: 'ofp_switch_config',
 }
 
@@ -110,6 +110,15 @@ export class OpenFlowChannel {
         {
           const { flags } = message.message.body
           log.info('CONFIG_REPLY', { flags })
+          this._addFlow(
+            {
+              dl_type: 'ip',
+              dl_src: 'fe:ff:ff:ff:ff:ff',
+              nw_src: '192.168.5.242',
+              tp_dst: 5060,
+            },
+            socket
+          )
         }
         break
       case PORT_STATUS:
@@ -124,8 +133,15 @@ export class OpenFlowChannel {
     }
   }
 
-  _addFlow() {
+  _addFlow(flow, socket) {
     // TODO
+    const packet = this._flowModMessage(flow, ADD)
+    this._sendPacket(packet, socket)
+    log.info('*** ADDING', {
+      packet,
+      actions: packet.body.instructions[0].body.actions[0],
+      match: packet.body.match,
+    })
   }
 
   _removeFlows() {
@@ -145,20 +161,20 @@ export class OpenFlowChannel {
     }
   }
 
-  _flowModMessage(obj, flow, command, out_port) {
+  _flowModMessage(flow, command, out_port = 0) {
     return {
       version,
       header: {
         type: FLOW_MOD,
-        xid: obj.message.header.xid,
+        length: 160,
+        xid: 1,
       },
       body: {
         command,
         hard_timeout: 0,
         idle_timeout: 100,
         priority: 0x8000,
-        buffer_id: obj.message.body.buffer_id,
-        out_port: 'OFPP_NONE',
+        out_port: 0xffff,
         flags: ['OFPFF_SEND_FLOW_REM'],
         match: {
           header: {
@@ -166,27 +182,35 @@ export class OpenFlowChannel {
           },
           body: {
             wildcards: 0,
-            in_port: flow.in_port,
+            in_port: 1,
             dl_src: flow.dl_src,
-            dl_dst: flow.dl_dst,
-            dl_vlan: flow.dl_vlan,
-            dl_vlan_pcp: flow.dl_vlan_pcp,
-            dl_type: flow.dl_type,
-            nw_proto: flow.nw_proto,
-            nw_src: flow.nw_src,
-            nw_dst: flow.nw_dst,
-            tp_src: flow.tp_src,
+            dl_type: 2048,
             tp_dst: flow.tp_dst,
+            nw_src: flow.nw_src,
+
+            dl_dst: '00:00:00:00:00:00',
+            nw_proto: '0.0.0.0',
+            nw_dst: '0.0.0.0',
+            tp_src: 0,
           },
         },
-        actions: {
-          header: {
-            type: 'OFPAT_OUTPUT',
+        instructions: [
+          {
+            header: { type: 'OFPIT_WRITE_ACTIONS', len: 16 },
+            body: {
+              actions: [
+                {
+                  header: {
+                    type: 'OFPAT_OUTPUT',
+                  },
+                  body: {
+                    port: 0xffff,
+                  },
+                },
+              ],
+            },
           },
-          body: {
-            port: out_port,
-          },
-        },
+        ],
       },
     }
   }
@@ -222,7 +246,13 @@ export class OpenFlowChannel {
   // ---------------------------------------------------------------------------
 
   async _sendPacket(packet, socket) {
-    const buf = Buffer.alloc(ofpp.sizes[toType[packet.header.type]])
+    const size =
+      packet.header.type === FLOW_MOD
+        ? 160
+        : ofpp.sizes[toType[packet.header.type]]
+    log.info('BUFFER SIZE', { size })
+    const buf = Buffer.alloc(size)
+    packet.header.length = size
 
     const pack = oflib.pack(packet, buf, 0)
     if ('error' in pack) {
@@ -232,7 +262,16 @@ export class OpenFlowChannel {
       return
     }
 
-    log.info('*** SENDING', { packet })
+    log.info('*** SENDING', { packet, pack })
+    const unpacked = oflib.unpack(buf)
+    if (packet.header.type === FLOW_MOD) {
+      log.info('*** SENDING 2', {
+        header: unpacked.message.header,
+        match: unpacked.message.body.match,
+        instruction: unpacked.message.body.instructions[0].body,
+        actions: unpacked.message.body.instructions[0].body.actions[0],
+      })
+    }
     try {
       socket.write(buf)
     } catch (error) {
