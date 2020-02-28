@@ -11,7 +11,7 @@
 
 > Users must be able to say: “I had this issue, happy to know it's fixed”
 
-- [Metadata backup] fix the metadata backup timeout (PR [#4831](https://github.com/vatesfr/xen-orchestra/pull/4831))
+- [Metadata backup] fix metadata backup timeout (PR [#4831](https://github.com/vatesfr/xen-orchestra/pull/4831))
 
 ### Released packages
 
