@@ -7,6 +7,8 @@
 
 > Users must be able to say: “Nice enhancement, I'm eager to test it”
 
+- [Support] Add a link to create a new support ticket [#4234](https://github.com/vatesfr/xen-orchestra/issues/4234) (PR [4833](https://github.com/vatesfr/xen-orchestra/pull/4833))
+
 ### Bug fixes
 
 > Users must be able to say: “I had this issue, happy to know it's fixed”
